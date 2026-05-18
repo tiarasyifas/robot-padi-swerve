@@ -1,0 +1,55 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /RobotModel1
+        - /TF1
+        - /Odometry1
+        - /Path1
+      Splitter Ratio: 0.5
+    Tree Height: 549
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.5
+      Class: rviz_default_plugins/Grid
+      Color: 128; 128; 128
+      Enabled: true
+      Name: Grid
+    - Class: rviz_default_plugins/RobotModel
+      Description Topic:
+        Value: /robot_description
+      Enabled: true
+      Name: RobotModel
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Name: Odometry
+      Topic:
+        Value: /swerve_odom
+    - Class: rviz_default_plugins/Path
+      Color: 0; 170; 0
+      Enabled: true
+      Name: Path
+      Topic:
+        Value: /target_trajectory
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: odom
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 5
+      Pitch: 0.6
+      Target Frame: base_link
+      Yaw: 1.57

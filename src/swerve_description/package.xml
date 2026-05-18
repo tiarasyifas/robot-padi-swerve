@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>swerve_description</name>
+  <version>1.0.0</version>
+  <description>URDF, worlds, dan launch files untuk Robot Padi Swerve Drive</description>
+  <maintainer email="your@email.com">Robot Padi Team</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>robot_state_publisher</depend>
+  <depend>joint_state_publisher</depend>
+  <depend>xacro</depend>
+  <depend>rviz2</depend>
+  <depend>ros_gz_sim</depend>
+  <depend>ros_gz_bridge</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

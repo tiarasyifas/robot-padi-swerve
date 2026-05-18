@@ -1,0 +1,40 @@
+# swerve_params.yaml
+# Konfigurasi Swerve Drive Controller - Robot Padi
+# ROS 2 Jazzy
+
+swerve_drive_controller:
+  ros__parameters:
+    # ── Dimensi Robot Fisik ─────────────────────────────────────────
+    wheel_base: 0.40          # jarak sumbu depan-belakang (m)
+    track_width: 0.35         # jarak sumbu kiri-kanan (m)
+    wheel_radius: 0.075       # jari-jari roda (m)
+    gear_ratio: 20.0          # rasio gearbox motor DC
+
+    # ── Batas Kecepatan ─────────────────────────────────────────────
+    max_drive_speed: 2.0      # kecepatan angular roda max (rad/s)
+    max_steer_rate: 1.5       # laju putar steering (rad/s)
+    max_linear_speed: 0.5     # kecepatan linear max robot (m/s)
+    max_angular_speed: 1.0    # kecepatan angular max robot (rad/s)
+
+    # ── Sudut Steering Preset ───────────────────────────────────────
+    steering_45_deg: 45.0     # derajat (akan dikonversi ke radian)
+    steering_90_deg: 90.0
+
+    # ── Parameter Sliding Mode Control ─────────────────────────────
+    # SMC untuk trajectory following
+    smc_k_linear: 1.2         # gain kontrol linear
+    smc_k_angular: 2.5        # gain kontrol angular
+    smc_lambda: 3.0           # slope sliding surface
+    smc_eta: 0.05             # boundary layer (anti-chattering)
+
+    # ── Toleransi Waypoint ─────────────────────────────────────────
+    waypoint_tolerance: 0.30  # jarak (m) untuk waypoint dianggap tercapai
+
+---
+# trajectory_publisher
+trajectory_publisher:
+  ros__parameters:
+    field_length: 10.0        # panjang lahan (m)
+    field_width: 5.0          # lebar lahan (m)
+    row_spacing: 0.25         # jarak antar baris padi (m)
+    trajectory_type: boustrophedon   # boustrophedon | diagonal_45 | crab_shift

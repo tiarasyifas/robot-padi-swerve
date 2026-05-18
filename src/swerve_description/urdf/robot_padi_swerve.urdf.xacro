@@ -1,0 +1,213 @@
+<?xml version="1.0"?>
+<!--
+  Robot Padi - Swerve Drive URDF
+  4 modul swerve: FL, FR, RL, RR
+  Setiap modul: 1 steering joint (revolute, sumbu Z) + 1 drive joint (continuous)
+  Kompatibel dengan Gazebo Harmonic (ROS 2 Jazzy) dan RViz2
+-->
+<robot name="robot_padi_swerve" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- ═══ PARAMETER ═══════════════════════════════════════════════ -->
+  <xacro:property name="wheel_base"    value="0.40"/>  <!-- jarak depan-belakang -->
+  <xacro:property name="track_width"   value="0.35"/>  <!-- jarak kiri-kanan -->
+  <xacro:property name="wheel_radius"  value="0.075"/> <!-- jari-jari roda -->
+  <xacro:property name="wheel_width"   value="0.05"/>  <!-- lebar roda -->
+  <xacro:property name="chassis_l"     value="0.55"/>
+  <xacro:property name="chassis_w"     value="0.40"/>
+  <xacro:property name="chassis_h"     value="0.12"/>
+  <xacro:property name="chassis_mass"  value="8.0"/>
+  <xacro:property name="wheel_mass"    value="0.4"/>
+  <xacro:property name="module_mass"   value="0.5"/>
+
+  <!-- ═══ MATERIAL ════════════════════════════════════════════════ -->
+  <material name="green_matte">
+    <color rgba="0.18 0.55 0.20 1.0"/>
+  </material>
+  <material name="dark_gray">
+    <color rgba="0.20 0.20 0.20 1.0"/>
+  </material>
+  <material name="silver">
+    <color rgba="0.75 0.75 0.75 1.0"/>
+  </material>
+  <material name="yellow">
+    <color rgba="0.95 0.80 0.10 1.0"/>
+  </material>
+
+  <!-- ═══ INERTIA MACROS ══════════════════════════════════════════ -->
+  <xacro:macro name="box_inertia" params="m l w h">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m*(w*w+h*h)/12}" ixy="0" ixz="0"
+        iyy="${m*(l*l+h*h)/12}" iyz="0"
+        izz="${m*(l*l+w*w)/12}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_inertia" params="m r h">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia
+        ixx="${m*(3*r*r+h*h)/12}" ixy="0" ixz="0"
+        iyy="${m*(3*r*r+h*h)/12}" iyz="0"
+        izz="${m*r*r/2}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ═══ CHASSIS (BASE LINK) ═════════════════════════════════════ -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${chassis_l} ${chassis_w} ${chassis_h}"/>
+      </geometry>
+      <material name="green_matte"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_l} ${chassis_w} ${chassis_h}"/>
+      </geometry>
+    </collision>
+    <xacro:box_inertia m="${chassis_mass}" l="${chassis_l}" w="${chassis_w}" h="${chassis_h}"/>
+  </link>
+
+  <!-- IMU Link -->
+  <link name="imu_link">
+    <visual>
+      <geometry><box size="0.03 0.03 0.01"/></geometry>
+      <material name="yellow"/>
+    </visual>
+    <inertial><mass value="0.01"/><inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/></inertial>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 ${chassis_h/2 + 0.01}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ═══ SWERVE MODULE MACRO ═════════════════════════════════════ -->
+  <!--
+    Setiap modul terdiri dari:
+      [base_link] --fixed--> [module_mount_X] --revolute(Z)--> [X_steer_link] --continuous(Y)--> [X_wheel]
+  -->
+  <xacro:macro name="swerve_module" params="name x y">
+
+    <!-- Mount frame (fixed ke chassis) -->
+    <link name="${name}_mount">
+      <visual>
+        <geometry><cylinder radius="0.04" length="0.06"/></geometry>
+        <material name="dark_gray"/>
+      </visual>
+      <inertial>
+        <mass value="0.1"/>
+        <inertia ixx="1e-4" ixy="0" ixz="0" iyy="1e-4" iyz="0" izz="1e-4"/>
+      </inertial>
+    </link>
+    <joint name="${name}_mount_joint" type="fixed">
+      <parent link="base_link"/>
+      <child link="${name}_mount"/>
+      <origin xyz="${x} ${y} ${-chassis_h/2}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Steering link (berputar sumbu Z) -->
+    <link name="${name}_steer_link">
+      <visual>
+        <geometry><box size="0.06 0.08 0.04"/></geometry>
+        <material name="silver"/>
+      </visual>
+      <collision>
+        <geometry><box size="0.06 0.08 0.04"/></geometry>
+      </collision>
+      <xacro:box_inertia m="${module_mass}" l="0.06" w="0.08" h="0.04"/>
+    </link>
+    <joint name="${name}_steering_joint" type="revolute">
+      <parent link="${name}_mount"/>
+      <child link="${name}_steer_link"/>
+      <origin xyz="0 0 -0.04" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-3.14159" upper="3.14159" effort="10.0" velocity="3.0"/>
+      <dynamics damping="0.5" friction="0.1"/>
+    </joint>
+
+    <!-- Roda (berputar sumbu Y) -->
+    <link name="${name}_wheel">
+      <visual>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <origin rpy="1.5708 0 0"/>
+        <material name="dark_gray"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <origin rpy="1.5708 0 0"/>
+      </collision>
+      <xacro:cylinder_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
+    </link>
+    <joint name="${name}_wheel_joint" type="continuous">
+      <parent link="${name}_steer_link"/>
+      <child link="${name}_wheel"/>
+      <origin xyz="0 0 ${-wheel_radius - 0.02}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.1" friction="0.05"/>
+    </joint>
+
+  </xacro:macro>
+
+  <!-- ═══ INSTANTIASI 4 MODUL SWERVE ═════════════════════════════ -->
+  <xacro:swerve_module name="front_left"
+      x="${wheel_base/2}"   y="${track_width/2}"/>
+  <xacro:swerve_module name="front_right"
+      x="${wheel_base/2}"   y="${-track_width/2}"/>
+  <xacro:swerve_module name="rear_left"
+      x="${-wheel_base/2}"  y="${track_width/2}"/>
+  <xacro:swerve_module name="rear_right"
+      x="${-wheel_base/2}"  y="${-track_width/2}"/>
+
+  <!-- ═══ GAZEBO PLUGINS ══════════════════════════════════════════ -->
+  <gazebo>
+    <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <parameters>$(find swerve_description)/config/ros2_control.yaml</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- Material Gazebo -->
+  <gazebo reference="base_link">
+    <material>Gazebo/Green</material>
+  </gazebo>
+  <gazebo reference="front_left_wheel">
+    <material>Gazebo/DarkGray</material>
+    <mu1>0.8</mu1>
+    <mu2>0.8</mu2>
+    <kp>500000.0</kp>
+    <kd>10.0</kd>
+  </gazebo>
+  <gazebo reference="front_right_wheel">
+    <material>Gazebo/DarkGray</material>
+    <mu1>0.8</mu1><mu2>0.8</mu2><kp>500000.0</kp><kd>10.0</kd>
+  </gazebo>
+  <gazebo reference="rear_left_wheel">
+    <material>Gazebo/DarkGray</material>
+    <mu1>0.8</mu1><mu2>0.8</mu2><kp>500000.0</kp><kd>10.0</kd>
+  </gazebo>
+  <gazebo reference="rear_right_wheel">
+    <material>Gazebo/DarkGray</material>
+    <mu1>0.8</mu1><mu2>0.8</mu2><kp>500000.0</kp><kd>10.0</kd>
+  </gazebo>
+
+  <!-- IMU sensor plugin -->
+  <gazebo reference="imu_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+      <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+        <ros>
+          <remapping>~/out:=/imu/data</remapping>
+        </ros>
+        <initial_orientation_as_reference>false</initial_orientation_as_reference>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+</robot>
