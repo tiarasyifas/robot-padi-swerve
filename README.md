@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Robot Padi Swerve Drive — Panduan Lengkap
 
 ## ROS 2 Jazzy | Sliding Mode Control | Swerve Drive | Gazebo Harmonic
@@ -412,3 +413,6 @@ touch src/swerve_controller/resource/swerve_controller
 - Cek bahwa `robot_state_publisher` berjalan: `ros2 node list`
 - Set Fixed Frame di RViz ke `base_link` atau `odom`
 - Add display: RobotModel, subscribe ke `/robot_description`
+=======
+# robot-padi-swerve
+>>>>>>> 64c52c540bf598f823f8579b169c9a7d9df0c6bf
