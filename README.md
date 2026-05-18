@@ -1,50 +1,4 @@
-<<<<<<< HEAD
-# Robot Padi Swerve Drive — Panduan Lengkap
----
-
-## 1. Arsitektur Sistem
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    ROS 2 JAZZY (Ubuntu 24.04)                  │
-│                                                                  │
-│  ┌──────────────┐    /cmd_vel     ┌────────────────────────┐   │
-│  │  Sistem Lama │───────────────► │  Swerve Drive          │   │
-│  │ (SMC legacy) │                 │  Controller            │   │
-│  └──────────────┘                 │                        │   │
-│                                   │  Mode:                 │   │
-│  ┌──────────────┐  /swerve_mode   │  • LEGACY (compat)     │   │
-│  │  Mode Switch │───────────────► │  • SWERVE_45           │   │
-│  └──────────────┘                 │  • SWERVE_90           │   │
-│                                   │  • TRAJECTORY          │   │
-│  ┌──────────────┐ /target_path    │                        │   │
-│  │  Trajectory  │───────────────► │  SMC Controller        │   │
-│  │  Publisher   │                 └──────────┬─────────────┘   │
-│  └──────────────┘                            │                  │
-│                              /wheel_speeds   │ /steering_angles │
-│                                   ┌──────────▼──────────┐      │
-│                                   │    Gazebo Harmonic  │      │
-│                                   │    / Joint States   │      │
-│                                   └─────────────────────┘      │
-└────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────┐
-│                    HARDWARE LAYER                               │
-│  ┌──────────┐   Serial/   ┌──────────┐  PWM  ┌─────────────┐ │
-│  │ ROS 2    │◄──micro-ROS─► ESP32 /  │──────►│ 4x Stepper  │ │
-│  │ Host PC  │             │ ATmega   │       │ (steering)  │ │
-│  └──────────┘             └──────────┘  PWM  ├─────────────┤ │
-│                                         ─────►│ 4x Motor DC │ │
-│                                               │ (drive)     │ │
-│                                         ◄─────├─────────────┤ │
-│                                         Enc   │ 4x Encoder  │ │
-│                                               └─────────────┘ │
-└────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2. Konsep Swerve Drive & Sudut Steering
+**##Konsep Swerve Drive & Sudut Steering**
 
 ### Apa itu Swerve Drive?
 
@@ -82,7 +36,7 @@ angle_roda_i  = atan2(vy_roda_i, vx_roda_i)
 
 ---
 
-## 3. Struktur Package
+## Struktur Package
 
 ```
 swerve_robot_padi/
@@ -118,7 +72,7 @@ swerve_robot_padi/
 
 ---
 
-## 4. Instalasi & Build
+## Instalasi & Build
 
 ### Prasyarat
 
@@ -158,7 +112,7 @@ source install/setup.bash
 
 ---
 
-## 5. Menjalankan Simulasi Gazebo
+## Menjalankan Simulasi Gazebo
 
 ### Terminal 1 — Simulasi penuh (Gazebo + RViz + Controller)
 
@@ -222,7 +176,7 @@ ros2 run rqt_graph rqt_graph
 
 ---
 
-## 6. Mode Operasi
+## Mode Operasi
 
 | Mode | Perintah | Sudut Steering | Kegunaan |
 |------|----------|---------------|----------|
@@ -233,7 +187,7 @@ ros2 run rqt_graph rqt_graph
 
 ---
 
-## 7. Sliding Mode Control (SMC)
+## Sliding Mode Control (SMC)
 
 ### Prinsip SMC untuk Trajectory Following
 
@@ -267,7 +221,7 @@ smc_eta: 0.05         # Perbesar → anti-chattering lebih baik, tapi error stea
 
 ---
 
-## 8. Hardware (Arduino/ESP)
+##  Hardware (Arduino/ESP)
 
 ### Wiring Stepper (NEMA 17 + A4988)
 
@@ -358,7 +312,7 @@ gazebo = ExecuteProcess(
 
 ---
 
-## 11. Troubleshooting
+## Troubleshooting
 
 ### Robot tidak bergerak di Gazebo
 
