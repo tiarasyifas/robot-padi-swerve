@@ -1,23 +1,5 @@
 <<<<<<< HEAD
 # Robot Padi Swerve Drive — Panduan Lengkap
-
-## ROS 2 Jazzy | Sliding Mode Control | Swerve Drive | Gazebo Harmonic
-
----
-
-## Daftar Isi
-1. [Arsitektur Sistem](#1-arsitektur-sistem)
-2. [Konsep Swerve Drive & Sudut Steering](#2-konsep-swerve-drive--sudut-steering)
-3. [Struktur Package](#3-struktur-package)
-4. [Instalasi & Build](#4-instalasi--build)
-5. [Menjalankan Simulasi Gazebo](#5-menjalankan-simulasi-gazebo)
-6. [Mode Operasi](#6-mode-operasi)
-7. [Sliding Mode Control (SMC)](#7-sliding-mode-control-smc)
-8. [Hardware (Arduino/ESP)](#8-hardware-arduinoesp)
-9. [Topik ROS 2](#9-topik-ros-2)
-10. [Migrasi Humble → Jazzy](#10-migrasi-humble--jazzy)
-11. [Troubleshooting](#11-troubleshooting)
-
 ---
 
 ## 1. Arsitektur Sistem
