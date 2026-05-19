@@ -175,5 +175,5 @@ void loop() {
   }
 
   nh.spinOnce();
-  yield();  // penting untuk ESP8266 agar WiFi stack berjalan
+  yield();  // 
 }
