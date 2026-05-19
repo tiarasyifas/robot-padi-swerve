@@ -1,0 +1,179 @@
+#include <ros.h>
+#include <std_msgs/Float32MultiArray.h>
+#include <sensor_msgs/Imu.h>
+#include <Wire.h>
+
+// ── Pin Encoder ───────────────────────────────────────────────────
+// ESP8266 pin yang support interrupt: D1(GPIO5), D2(GPIO4),
+//                                     D5(GPIO14), D6(GPIO12)
+#define ENC_FL_A  D1   // GPIO5
+#define ENC_FR_A  D2   // GPIO4
+#define ENC_RL_A  D5   // GPIO14
+#define ENC_RR_A  D6   // GPIO12
+
+// Channel B untuk arah (polling, tidak perlu interrupt)
+#define ENC_FL_B  D3   // GPIO0
+#define ENC_FR_B  D4   // GPIO2
+#define ENC_RL_B  D7   // GPIO13
+#define ENC_RR_B  D8   // GPIO15
+
+// ── Konstanta Encoder ─────────────────────────────────────────────
+// Sesuaikan dengan spesifikasi rotary encoder yang digunakan
+const float ENCODER_PPR      = 600.0;   // pulse per revolution encoder
+const float WHEEL_RADIUS     = 0.35;    // meter (sesuai URDF)
+const float ENCODER_TO_RAD   = (2.0 * PI) / ENCODER_PPR;
+
+// ── State Encoder ─────────────────────────────────────────────────
+volatile long enc_count[4] = {0, 0, 0, 0};
+long prev_count[4]         = {0, 0, 0, 0};
+unsigned long prev_time_us = 0;
+
+// ── ISR Encoder ───────────────────────────────────────────────────
+void IRAM_ATTR enc_fl_isr() {
+  enc_count[0] += (digitalRead(ENC_FL_B) == HIGH) ? 1 : -1;
+}
+void IRAM_ATTR enc_fr_isr() {
+  enc_count[1] += (digitalRead(ENC_FR_B) == HIGH) ? 1 : -1;
+}
+void IRAM_ATTR enc_rl_isr() {
+  enc_count[2] += (digitalRead(ENC_RL_B) == HIGH) ? 1 : -1;
+}
+void IRAM_ATTR enc_rr_isr() {
+  enc_count[3] += (digitalRead(ENC_RR_B) == HIGH) ? 1 : -1;
+}
+
+// ── MPU6050 (IMU) ─────────────────────────────────────────────────
+#define MPU6050_ADDR 0x68
+float accel[3] = {0, 0, 0};
+float gyro[3]  = {0, 0, 0};
+
+void read_mpu6050() {
+  Wire.beginTransmission(MPU6050_ADDR);
+  Wire.write(0x3B);  // register accel
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU6050_ADDR, 14, true);
+
+  int16_t ax = Wire.read() << 8 | Wire.read();
+  int16_t ay = Wire.read() << 8 | Wire.read();
+  int16_t az = Wire.read() << 8 | Wire.read();
+  Wire.read(); Wire.read();  // skip temperature
+  int16_t gx = Wire.read() << 8 | Wire.read();
+  int16_t gy = Wire.read() << 8 | Wire.read();
+  int16_t gz = Wire.read() << 8 | Wire.read();
+
+  // Konversi ke SI units
+  accel[0] = ax / 16384.0 * 9.81;
+  accel[1] = ay / 16384.0 * 9.81;
+  accel[2] = az / 16384.0 * 9.81;
+  gyro[0]  = gx / 131.0 * PI / 180.0;
+  gyro[1]  = gy / 131.0 * PI / 180.0;
+  gyro[2]  = gz / 131.0 * PI / 180.0;
+}
+
+// ── ROS Setup ─────────────────────────────────────────────────────
+ros::NodeHandle nh;
+
+std_msgs::Float32MultiArray enc_msg;
+std_msgs::Float32MultiArray vel_msg;
+sensor_msgs::Imu imu_msg;
+
+float enc_data[4] = {0, 0, 0, 0};
+float vel_data[4] = {0, 0, 0, 0};
+
+ros::Publisher pub_enc("/encoder_counts", &enc_msg);
+ros::Publisher pub_vel("/wheel_velocity",  &vel_msg);
+ros::Publisher pub_imu("/imu/data",        &imu_msg);
+
+// ── Timer publish ─────────────────────────────────────────────────
+unsigned long last_publish_ms = 0;
+const int PUBLISH_RATE_MS = 20;  // 50 Hz
+
+// ═════════════════════════════════════════════════════════════════
+void setup() {
+  Serial.begin(57600);
+
+  // Setup encoder pins
+  pinMode(ENC_FL_A, INPUT_PULLUP);
+  pinMode(ENC_FR_A, INPUT_PULLUP);
+  pinMode(ENC_RL_A, INPUT_PULLUP);
+  pinMode(ENC_RR_A, INPUT_PULLUP);
+  pinMode(ENC_FL_B, INPUT_PULLUP);
+  pinMode(ENC_FR_B, INPUT_PULLUP);
+  pinMode(ENC_RL_B, INPUT_PULLUP);
+  pinMode(ENC_RR_B, INPUT_PULLUP);
+
+  // Attach interrupt encoder
+  attachInterrupt(digitalPinToInterrupt(ENC_FL_A), enc_fl_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENC_FR_A), enc_fr_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENC_RL_A), enc_rl_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENC_RR_A), enc_rr_isr, RISING);
+
+  // Setup I2C untuk MPU6050
+  Wire.begin(D1, D2);  // SDA=D2, SCL=D1 (sesuaikan)
+  // Aktifkan MPU6050
+  Wire.beginTransmission(MPU6050_ADDR);
+  Wire.write(0x6B);
+  Wire.write(0x00);  // wake up
+  Wire.endTransmission(true);
+
+  // Setup ROS via WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+  }
+
+  nh.getHardware()->setConnection(ROS_SERVER_IP, ROS_PORT);
+  nh.initNode();
+  nh.advertise(pub_enc);
+  nh.advertise(pub_vel);
+  nh.advertise(pub_imu);
+
+  // Setup pesan array
+  enc_msg.data_length = 4;
+  enc_msg.data = enc_data;
+  vel_msg.data_length = 4;
+  vel_msg.data = vel_data;
+
+  prev_time_us = micros();
+}
+
+void loop() {
+  unsigned long now_ms = millis();
+
+  if (now_ms - last_publish_ms >= PUBLISH_RATE_MS) {
+    last_publish_ms = now_ms;
+
+    // Hitung kecepatan dari encoder
+    unsigned long now_us = micros();
+    float dt = (now_us - prev_time_us) / 1e6;
+    prev_time_us = now_us;
+
+    for (int i = 0; i < 4; i++) {
+      long delta = enc_count[i] - prev_count[i];
+      prev_count[i] = enc_count[i];
+
+      // Kecepatan angular roda (rad/s)
+      vel_data[i] = (delta * ENCODER_TO_RAD) / dt;
+      enc_data[i] = (float)enc_count[i];
+    }
+
+    // Publish encoder
+    pub_enc.publish(&enc_msg);
+    pub_vel.publish(&vel_msg);
+
+    // Baca dan publish IMU
+    read_mpu6050();
+    imu_msg.header.stamp = nh.now();
+    imu_msg.header.frame_id = "imu_link";
+    imu_msg.linear_acceleration.x = accel[0];
+    imu_msg.linear_acceleration.y = accel[1];
+    imu_msg.linear_acceleration.z = accel[2];
+    imu_msg.angular_velocity.x = gyro[0];
+    imu_msg.angular_velocity.y = gyro[1];
+    imu_msg.angular_velocity.z = gyro[2];
+    pub_imu.publish(&imu_msg);
+  }
+
+  nh.spinOnce();
+  yield();  // penting untuk ESP8266 agar WiFi stack berjalan
+}
