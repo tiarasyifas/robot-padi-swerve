@@ -1,0 +1,211 @@
+#include <ros.h>
+#include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/String.h>
+#include <AccelStepper.h>
+
+──────────────────────────────────────────────────────────────
+
+// ── Pin Stepper FL (Front Left) ───────────────────────────────────
+#define FL_STEP_PIN   2
+#define FL_DIR_PIN    3
+#define FL_EN_PIN     22
+
+// ── Pin Stepper FR (Front Right) ──────────────────────────────────
+#define FR_STEP_PIN   4
+#define FR_DIR_PIN    5
+#define FR_EN_PIN     23
+
+// ── Pin Stepper RL (Rear Left) ────────────────────────────────────
+#define RL_STEP_PIN   6
+#define RL_DIR_PIN    7
+#define RL_EN_PIN     24
+
+// ── Pin Stepper RR (Rear Right) ───────────────────────────────────
+#define RR_STEP_PIN   8
+#define RR_DIR_PIN    9
+#define RR_EN_PIN     25
+
+// ── Limit Switch (Home/Zero) ──────────────────────────────────────
+#define FL_LIMIT_PIN  30
+#define FR_LIMIT_PIN  31
+#define RL_LIMIT_PIN  32
+#define RR_LIMIT_PIN  33
+
+
+const float STEPS_PER_REV    = 200.0;
+const float MICROSTEP_DIV    = 16.0;     // setting HBS57
+const float GEAR_RATIO_STEER = 5.0;      // rasio gearbox steering
+// Total: 200 * 16 * 5 / (2*PI) = 2546.5 steps/radian
+const float STEPS_PER_RAD    = (STEPS_PER_REV * MICROSTEP_DIV * GEAR_RATIO_STEER) / (2.0 * PI);
+
+// Kecepatan dan akselerasi stepper
+// NEMA 23 3.0Nm mampu kecepatan tinggi - sesuaikan dengan kebutuhan
+const float MAX_STEPPER_SPEED = 5000.0;   // pulse/s (naikkan jika motor kuat)
+const float STEPPER_ACCEL     = 10000.0;  // pulse/s²
+
+// ── Inisialisasi AccelStepper ─────────────────────────────────────
+// Mode DRIVER: eksternal driver (HBS57), pakai Step/Dir
+AccelStepper stepper_fl(AccelStepper::DRIVER, FL_STEP_PIN, FL_DIR_PIN);
+AccelStepper stepper_fr(AccelStepper::DRIVER, FR_STEP_PIN, FR_DIR_PIN);
+AccelStepper stepper_rl(AccelStepper::DRIVER, RL_STEP_PIN, RL_DIR_PIN);
+AccelStepper stepper_rr(AccelStepper::DRIVER, RR_STEP_PIN, RR_DIR_PIN);
+
+AccelStepper* steppers[4] = {
+  &stepper_fl, &stepper_fr, &stepper_rl, &stepper_rr
+};
+int en_pins[4] = {FL_EN_PIN, FR_EN_PIN, RL_EN_PIN, RR_EN_PIN};
+int limit_pins[4] = {FL_LIMIT_PIN, FR_LIMIT_PIN, RL_LIMIT_PIN, RR_LIMIT_PIN};
+
+// ── State ─────────────────────────────────────────────────────────
+float target_angles[4] = {0.0, 0.0, 0.0, 0.0};  // radian
+bool  homing_done = false;
+bool  motors_enabled = true;
+
+// ── ROS Setup ─────────────────────────────────────────────────────
+ros::NodeHandle nh;
+
+// Callback: terima sudut steering dari ROS
+void steering_callback(const std_msgs::Float32MultiArray& msg) {
+  if (msg.data_length >= 4) {
+    for (int i = 0; i < 4; i++) {
+      target_angles[i] = msg.data[i];
+    }
+    set_stepper_targets();
+  }
+}
+
+// Callback: terima kecepatan roda (untuk info saja di Mega,
+// kecepatan motor DC dihandle terpisah atau via ESC)
+void speed_callback(const std_msgs::Float32MultiArray& msg) {
+  // Di sistem ini, motor DC drive dihandle terpisah
+  // Arduino Mega fokus ke steering stepper
+  // Implementasikan jika Mega juga kontrol drive motor
+}
+
+ros::Subscriber<std_msgs::Float32MultiArray> sub_steer(
+    "/steering_angles", &steering_callback);
+ros::Subscriber<std_msgs::Float32MultiArray> sub_speed(
+    "/wheel_speeds", &speed_callback);
+
+std_msgs::String status_msg;
+ros::Publisher pub_status("/stepper_status", &status_msg);
+
+// ── Fungsi Set Target Stepper ─────────────────────────────────────
+void set_stepper_targets() {
+  for (int i = 0; i < 4; i++) {
+    // Konversi radian ke steps
+    long target_steps = (long)(target_angles[i] * STEPS_PER_RAD);
+    // Batasi range: ±180° = ±PI radian
+    target_steps = constrain(
+      target_steps,
+      (long)(-PI * STEPS_PER_RAD),
+      (long)(PI * STEPS_PER_RAD)
+    );
+    steppers[i]->moveTo(target_steps);
+  }
+}
+
+// ── Enable/Disable Semua Motor ────────────────────────────────────
+void enable_motors(bool enable) {
+  for (int i = 0; i < 4; i++) {
+    // HBS57: ENA aktif LOW = motor ON
+    digitalWrite(en_pins[i], enable ? LOW : HIGH);
+  }
+  motors_enabled = enable;
+}
+
+// ── Homing: gerak ke limit switch ─────────────────────────────────
+void home_all_steppers() {
+  // Gerak mundur perlahan sampai limit switch
+  for (int i = 0; i < 4; i++) {
+    steppers[i]->setSpeed(-500);  // perlahan
+  }
+
+  bool all_homed[4] = {false, false, false, false};
+  bool all_done = false;
+
+  while (!all_done) {
+    all_done = true;
+    for (int i = 0; i < 4; i++) {
+      if (!all_homed[i]) {
+        if (digitalRead(limit_pins[i]) == LOW) {
+          // Limit switch tertekan = posisi home
+          steppers[i]->stop();
+          steppers[i]->setCurrentPosition(0);
+          all_homed[i] = true;
+        } else {
+          steppers[i]->runSpeed();
+          all_done = false;
+        }
+      }
+    }
+    nh.spinOnce();
+  }
+
+  homing_done = true;
+  // Set kecepatan normal setelah homing
+  for (int i = 0; i < 4; i++) {
+    steppers[i]->setMaxSpeed(MAX_STEPPER_SPEED);
+    steppers[i]->setAcceleration(STEPPER_ACCEL);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════
+void setup() {
+  Serial.begin(57600);  // ROSserial baudrate
+
+  // Setup enable pins
+  for (int i = 0; i < 4; i++) {
+    pinMode(en_pins[i], OUTPUT);
+    digitalWrite(en_pins[i], LOW);  // aktif LOW = motor ON
+  }
+
+  // Setup limit switch pins
+  for (int i = 0; i < 4; i++) {
+    pinMode(limit_pins[i], INPUT_PULLUP);
+  }
+
+  // Setup stepper
+  for (int i = 0; i < 4; i++) {
+    steppers[i]->setMaxSpeed(MAX_STEPPER_SPEED);
+    steppers[i]->setAcceleration(STEPPER_ACCEL);
+    steppers[i]->setCurrentPosition(0);
+  }
+
+  // ROS init
+  nh.initNode();
+  nh.subscribe(sub_steer);
+  nh.subscribe(sub_speed);
+  nh.advertise(pub_status);
+
+  // Tunggu koneksi ROS
+  while (!nh.connected()) {
+    nh.spinOnce();
+    delay(10);
+  }
+
+  // Homing (opsional - comment jika tidak ada limit switch)
+  // home_all_steppers();
+
+  // Set posisi awal = 0 (lurus)
+  for (int i = 0; i < 4; i++) {
+    steppers[i]->setCurrentPosition(0);
+    steppers[i]->moveTo(0);
+  }
+
+  status_msg.data = "Arduino Mega: Stepper Controller Siap";
+  pub_status.publish(&status_msg);
+}
+
+void loop() {
+  // Jalankan semua stepper non-blocking
+  for (int i = 0; i < 4; i++) {
+    steppers[i]->run();
+  }
+
+  // Proses pesan ROS
+  nh.spinOnce();
+
+  // Minimal delay untuk stabilitas
+  delay(1);
+}
